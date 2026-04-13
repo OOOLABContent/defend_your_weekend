@@ -1,0 +1,774 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Defend Your Weekend</title>
+  <link href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;700;800&display=swap" rel="stylesheet">
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      background: #1b1b20;
+      width: 100vw;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    #game {
+      position: relative;
+      width: 100%;
+      height: 100%;
+      overflow: hidden;
+      background: #1b1b20;
+      user-select: none;
+      font-family: 'Segoe UI Symbol', sans-serif;
+    }
+
+    /* ── Background ── */
+    #bg-grid {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      background-image:
+        linear-gradient(rgba(255,0,130,0.04) 1px, transparent 1px),
+        linear-gradient(90deg, rgba(255,0,130,0.04) 1px, transparent 1px),
+        radial-gradient(ellipse 80% 60% at 50% 50%, rgba(255,0,130,0.06) 0%, transparent 70%);
+      background-size: 60px 60px, 60px 60px, 100% 100%;
+    }
+
+    #scanline {
+      position: absolute;
+      left: 0; right: 0;
+      height: 2px;
+      background: rgba(255,0,130,0.08);
+      pointer-events: none;
+      z-index: 5;
+      display: none;
+      animation: mgScanline 4s linear infinite;
+    }
+
+    /* ── HUD Top-Left ── */
+    #hud-tl {
+      position: absolute;
+      top: 32px; left: 32px;
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    .hud-label {
+      font-size: 10px;
+      color: #e4e1e8;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 2px;
+    }
+
+    .hud-sublabel {
+      font-size: 10px;
+      color: #ff0082;
+      text-transform: uppercase;
+      letter-spacing: -0.5px;
+      margin-top: 2px;
+    }
+
+    #hearts-row {
+      display: flex;
+      gap: 10px;
+      align-items: center;
+    }
+
+    .heart {
+      font-size: 32px;
+      line-height: 1;
+      transition: color 0.3s, text-shadow 0.3s;
+    }
+    .heart.on  { color: #ff0082; text-shadow: 0 0 12px #ff0082, 0 0 24px rgba(255,0,130,0.5); }
+    .heart.off { color: rgba(255,0,130,0.18); text-shadow: none; }
+
+    #timer-display {
+      font-family: 'Manrope', sans-serif;
+      font-weight: 800;
+      font-size: 48px;
+      color: white;
+      line-height: 1;
+    }
+    #timer-display.low { color: #ff0082; animation: mgPulse 0.7s ease infinite; }
+
+    /* ── HUD Top-Right ── */
+    #hud-tr {
+      position: absolute;
+      top: 32px; right: 32px;
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 2px;
+      pointer-events: none;
+      z-index: 20;
+    }
+
+    #score-display {
+      font-family: 'Manrope', sans-serif;
+      font-weight: 800;
+      font-size: 48px;
+      color: white;
+      line-height: 1;
+    }
+
+    /* ── Right Sidebar ── */
+    #sidebar {
+      position: absolute;
+      top: 128px; right: 32px;
+      width: 260px;
+      pointer-events: none;
+      z-index: 20;
+      backdrop-filter: blur(6px);
+      background: rgba(255,255,255,0.05);
+      border-left: 2px solid rgba(255,0,130,0.3);
+      padding: 16px 16px 4px 18px;
+    }
+
+    .sb-head {
+      display: flex;
+      justify-content: space-between;
+      margin-bottom: 12px;
+    }
+    .sb-title { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 12px; color: white; text-transform: uppercase; letter-spacing: 1.2px; }
+    .sb-count { font-family: 'Manrope', sans-serif; font-weight: 700; font-size: 12px; color: #ff0082; letter-spacing: 1.2px; text-transform: uppercase; }
+
+    .task { margin-bottom: 16px; }
+    .task-row { display: flex; justify-content: space-between; margin-bottom: 4px; }
+    .task-name, .task-pct { font-size: 10px; color: #e4e1e8; text-transform: uppercase; }
+    .task-track { background: rgba(255,255,255,0.1); height: 4px; border-radius: 9999px; overflow: hidden; }
+    .task-fill  { background: #ff0082; height: 100%; }
+
+    /* ── Targets ── */
+    #targets-layer {
+      position: absolute;
+      inset: 0;
+      pointer-events: none;
+      z-index: 10;
+    }
+
+    .target {
+      position: absolute;
+      width: 120px;
+      transform: translateX(-50%);
+      pointer-events: auto;
+      cursor: none;
+    }
+    .target.burst {
+      opacity: 0;
+      transition: opacity 0.4s ease-out;
+      pointer-events: none;
+    }
+
+    .target-inner {
+      backdrop-filter: blur(4px);
+      background: rgba(255,0,130,0.07);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 4px;
+      padding: 16px 16px 14px;
+      text-align: center;
+      position: relative;
+      animation: mgGlow 2s ease infinite;
+      cursor: none;
+    }
+    .target.burst .target-inner {
+      background: rgba(255,0,130,0.35);
+      border-color: rgba(255,0,130,0.6);
+      box-shadow: 0 0 40px rgba(255,0,130,0.8), inset 0 0 20px rgba(255,0,130,0.3);
+      animation: none;
+    }
+
+    .target-icon { display: flex; justify-content: center; margin-bottom: 8px; transform: scaleY(-1); }
+    .target-name { font-size: 10px; color: white; text-transform: uppercase; letter-spacing: -0.5px; white-space: nowrap; }
+    .target-pts  { font-size: 8px; color: #ff0082; text-transform: uppercase; letter-spacing: 0.5px; margin-top: 4px; opacity: 0.8; }
+    .target-crit {
+      position: absolute; top: -5px; right: -5px;
+      background: #ff0082; border-radius: 4px;
+      padding: 2px 6px; font-size: 8px; color: white;
+      letter-spacing: 0.5px;
+      box-shadow: 0 0 8px rgba(255,0,130,0.6);
+    }
+
+    /* ── Crosshair ── */
+    #crosshair {
+      position: absolute;
+      width: 96px; height: 96px;
+      pointer-events: none;
+      z-index: 100;
+      display: none;
+      transform: translate(-50%, -50%);
+    }
+    .ch-ring   { position: absolute; inset: 0; border: 2px solid rgba(255,0,130,0.4); border-radius: 50%; }
+    .ch-h      { position: absolute; top: 50%; left: 0; right: 0; height: 2px; background: #ff0082; transform: translateY(-50%); }
+    .ch-v      { position: absolute; left: 50%; top: 0; bottom: 0; width: 2px; background: #ff0082; transform: translateX(-50%); }
+    .ch-dot    { position: absolute; top: 50%; left: 50%; transform: translate(-50%,-50%); width: 8px; height: 8px; background: #ff0082; border-radius: 50%; box-shadow: 0 0 15px #ff0082, 0 0 30px rgba(255,0,130,0.5); }
+    .ch-c      { position: absolute; width: 16px; height: 16px; }
+    .ch-c.tl   { top: 0; left: 0;  border-top: 2px solid #ff0082; border-left:  2px solid #ff0082; }
+    .ch-c.tr   { top: 0; right: 0; border-top: 2px solid #ff0082; border-right: 2px solid #ff0082; }
+    .ch-c.bl   { bottom: 0; left: 0;  border-bottom: 2px solid #ff0082; border-left:  2px solid #ff0082; }
+    .ch-c.br   { bottom: 0; right: 0; border-bottom: 2px solid #ff0082; border-right: 2px solid #ff0082; }
+
+    /* ── Shoot rings ── */
+    #fx-layer { position: absolute; inset: 0; pointer-events: none; z-index: 200; }
+    .shoot-ring {
+      position: absolute;
+      width: 50px; height: 50px;
+      border: 2px solid #ff0082;
+      border-radius: 50%;
+      box-shadow: 0 0 12px rgba(255,0,130,0.6), inset 0 0 8px rgba(255,0,130,0.3);
+      transform: translate(-50%, -50%);
+      animation: shootRing 0.5s ease-out forwards;
+    }
+
+    /* ── Red flash ── */
+    #flash {
+      position: absolute; inset: 0;
+      background: rgba(186,26,26,0.35);
+      pointer-events: none;
+      z-index: 300;
+      display: none;
+    }
+    #flash.on { display: block; animation: mgFlash 0.6s ease-out forwards; }
+
+    /* ── Bottom bar ── */
+    #bottom-bar { position: absolute; bottom: 0; left: 0; right: 0; pointer-events: none; z-index: 20; }
+    #bottom-line { height: 4px; background: linear-gradient(90deg, rgba(255,0,130,0) 0%, #ff0082 50%, rgba(255,0,130,0) 100%); opacity: 0.8; box-shadow: 0 0 20px #ff0082; }
+    #bottom-content {
+      backdrop-filter: blur(12px);
+      background: rgba(27,27,32,0.85);
+      display: flex; align-items: center; justify-content: center;
+      gap: 16px; padding: 12px 0; position: relative;
+    }
+    .weekend-text { font-size: 14px; color: white; text-transform: uppercase; letter-spacing: 5.6px; }
+    #fail-badge { position: absolute; right: 36px; top: 50%; transform: translateY(-50%); display: flex; gap: 8px; align-items: center; }
+    .fail-lbl { font-size: 10px; color: #e4e1e8; text-transform: uppercase; }
+    .fail-tag { background: #ba1a1a; border-radius: 4px; padding: 2px 8px; font-size: 10px; color: white; }
+
+    /* ── Corner identity ── */
+    #corner {
+      position: absolute; bottom: 64px; left: 32px;
+      pointer-events: none; z-index: 20;
+      display: flex; gap: 32px; align-items: flex-end;
+    }
+    .corner-block { display: flex; flex-direction: column; gap: 4px; }
+    .corner-lbl { font-size: 8px; color: #e4e1e8; text-transform: uppercase; letter-spacing: 0.8px; }
+    .corner-val { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 18px; color: white; }
+    .corner-div { width: 1px; height: 32px; background: rgba(228,225,232,0.2); }
+
+    /* ── Overlay ── */
+    #overlay {
+      position: absolute; inset: 0;
+      display: flex; align-items: center; justify-content: center;
+      z-index: 500;
+      background: rgba(27,27,32,0.88);
+      backdrop-filter: blur(10px);
+    }
+    #overlay.go { background: rgba(18,10,10,0.92); }
+
+    .panel {
+      display: none;
+      flex-direction: column;
+      align-items: center;
+      gap: 20px;
+      max-width: 520px;
+      text-align: center;
+      animation: mgFadeUp 0.5s ease-out;
+    }
+    .panel.show { display: flex; }
+
+    .ov-eye  { font-size: 11px; text-transform: uppercase; letter-spacing: 5px; }
+    .ov-title { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 52px; line-height: 1.1; }
+    .ov-sub  { font-size: 13px; color: #e4e1e8; text-transform: uppercase; letter-spacing: 0.8px; line-height: 1.8; }
+
+    .info-row {
+      display: flex; gap: 28px;
+      padding: 14px 24px;
+      background: rgba(255,0,130,0.06);
+      border: 1px solid rgba(255,0,130,0.2);
+      border-radius: 4px;
+    }
+    .info-item { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+    .info-icon { font-size: 22px; }
+    .info-lbl  { font-size: 9px; color: #e4e1e8; text-transform: uppercase; letter-spacing: 1px; }
+
+    .pts-row { display: flex; gap: 12px; font-size: 9px; color: #e4e1e8; text-transform: uppercase; letter-spacing: 0.5px; }
+
+    .btn {
+      border: none; border-radius: 4px;
+      padding: 14px 44px;
+      color: white;
+      font-family: 'Manrope', sans-serif; font-weight: 700;
+      font-size: 13px; letter-spacing: 2.5px;
+      text-transform: uppercase; cursor: pointer;
+      transition: box-shadow 0.2s, transform 0.2s;
+      margin-top: 4px;
+    }
+    .btn-pink { background: #ff0082; box-shadow: 0 0 24px rgba(255,0,130,0.5); }
+    .btn-pink:hover { box-shadow: 0 0 40px rgba(255,0,130,0.8); transform: scale(1.04); }
+    .btn-red  { background: #ba1a1a; box-shadow: 0 0 24px rgba(186,26,26,0.5); }
+    .btn-red:hover  { box-shadow: 0 0 40px rgba(186,26,26,0.8); transform: scale(1.04); }
+
+    .score-big { font-family: 'Manrope', sans-serif; font-weight: 800; font-size: 36px; color: #ff0082; }
+    .score-lbl { font-size: 9px; color: #e4e1e8; text-transform: uppercase; letter-spacing: 1px; }
+    .result-row { display: flex; gap: 32px; margin-top: 8px; align-items: center; }
+    .result-block { text-align: center; }
+    .result-div { width: 1px; background: rgba(228,225,232,0.2); align-self: stretch; }
+
+    /* ── Keyframes ── */
+    @keyframes shootRing {
+      0%   { transform: translate(-50%,-50%) scale(0.2); opacity: 1; }
+      100% { transform: translate(-50%,-50%) scale(3);   opacity: 0; }
+    }
+    @keyframes mgPulse {
+      0%,100% { opacity: 1; }
+      50%     { opacity: 0.4; }
+    }
+    @keyframes mgFlash {
+      0%   { opacity: 0.5; }
+      100% { opacity: 0; }
+    }
+    @keyframes mgFadeUp {
+      from { opacity: 0; transform: translateY(24px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes mgGlow {
+      0%,100% { box-shadow: 0 0 10px rgba(255,0,130,0.3); }
+      50%     { box-shadow: 0 0 25px rgba(255,0,130,0.7); }
+    }
+    @keyframes mgScanline {
+      0%   { transform: translateY(-100%); }
+      100% { transform: translateY(100vh); }
+    }
+  </style>
+</head>
+<body>
+<div id="game">
+
+  <!-- Background -->
+  <div id="bg-grid"></div>
+  <div id="scanline"></div>
+
+  <!-- HUD: Top-Left -->
+  <div id="hud-tl">
+    <div>
+      <div class="hud-label">Active Operations</div>
+      <div id="hearts-row">
+        <span class="heart on" id="h0">♥</span>
+        <span class="heart on" id="h1">♥</span>
+        <span class="heart on" id="h2">♥</span>
+      </div>
+      <div class="hud-sublabel" id="heart-status">Full Integrity</div>
+    </div>
+    <div>
+      <div class="hud-label">Time Remaining</div>
+      <div id="timer-display">01:00</div>
+      <div class="hud-sublabel" id="timer-status">Defense Active</div>
+    </div>
+  </div>
+
+  <!-- HUD: Top-Right -->
+  <div id="hud-tr">
+    <div class="hud-label" style="text-align:right">System Integrity</div>
+    <div id="score-display">00000</div>
+    <div class="hud-sublabel" style="text-align:right">Points Secured</div>
+  </div>
+
+  <!-- Right Sidebar -->
+  <div id="sidebar">
+    <div class="sb-head">
+      <span class="sb-title">Active Tasks</span>
+      <span class="sb-count">04</span>
+    </div>
+    <div class="task">
+      <div class="task-row"><span class="task-name">Legacy Migration</span><span class="task-pct">72%</span></div>
+      <div class="task-track"><div class="task-fill" style="width:72%"></div></div>
+    </div>
+    <div class="task">
+      <div class="task-row"><span class="task-name">DDoS Mitigation</span><span class="task-pct">45%</span></div>
+      <div class="task-track"><div class="task-fill" style="width:45%"></div></div>
+    </div>
+    <div class="task">
+      <div class="task-row"><span class="task-name">Kernel Patching</span><span class="task-pct">12%</span></div>
+      <div class="task-track"><div class="task-fill" style="width:12%"></div></div>
+    </div>
+  </div>
+
+  <!-- Targets layer -->
+  <div id="targets-layer"></div>
+
+  <!-- Crosshair -->
+  <div id="crosshair">
+    <div class="ch-ring"></div>
+    <div class="ch-h"></div>
+    <div class="ch-v"></div>
+    <div class="ch-dot"></div>
+    <div class="ch-c tl"></div>
+    <div class="ch-c tr"></div>
+    <div class="ch-c bl"></div>
+    <div class="ch-c br"></div>
+  </div>
+
+  <!-- Shoot-ring effects -->
+  <div id="fx-layer"></div>
+
+  <!-- Screen flash -->
+  <div id="flash"></div>
+
+  <!-- Bottom bar — YOUR WEEKEND -->
+  <div id="bottom-bar">
+    <div id="bottom-line"></div>
+    <div id="bottom-content">
+      <svg width="14" height="16" viewBox="0 0 14.01 15.99" fill="none" style="transform:scaleY(-1)">
+        <path d="M0.898 2.998L7.005 13.546L13.112 2.998H0.898ZM2.814 4.108H11.196L7.005 11.325L2.814 4.108ZM7.005 4.663C7.202 4.663 7.401 4.823 7.56 5.218C7.56 5.376 7.507 5.508 7.401 5.614C7.294 5.72 7.162 5.774 7.005 5.774C6.848 5.774 6.716 5.72 6.609 5.614C6.503 5.508 6.45 5.376 6.45 5.218C6.45 5.061 6.503 4.929 6.609 4.823C6.716 4.717 6.848 4.663 7.005 4.663ZM6.45 6.329H7.56V9.105H6.45V6.329Z" fill="#FF0082"/>
+      </svg>
+      <span class="weekend-text">Your Weekend</span>
+      <svg width="14" height="16" viewBox="0 0 14.01 15.99" fill="none" style="transform:scaleY(-1)">
+        <path d="M0.898 2.998L7.005 13.546L13.112 2.998H0.898ZM2.814 4.108H11.196L7.005 11.325L2.814 4.108ZM7.005 4.663C7.202 4.663 7.401 4.823 7.56 5.218C7.56 5.376 7.507 5.508 7.401 5.614C7.294 5.72 7.162 5.774 7.005 5.774C6.848 5.774 6.716 5.72 6.609 5.614C6.503 5.508 6.45 5.376 6.45 5.218C6.45 5.061 6.503 4.929 6.609 4.823C6.716 4.717 6.848 4.663 7.005 4.663ZM6.45 6.329H7.56V9.105H6.45V6.329Z" fill="#FF0082"/>
+      </svg>
+      <div id="fail-badge">
+        <span class="fail-lbl">Failure Threshold</span>
+        <span class="fail-tag">HIGH RISK</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Corner identity -->
+  <div id="corner">
+    <div class="corner-block">
+      <div class="corner-lbl">Architecture Node</div>
+      <div class="corner-val">NX-9000-GLB</div>
+    </div>
+    <div class="corner-div"></div>
+    <div class="corner-block">
+      <div class="corner-lbl">Sector Authority</div>
+      <div class="corner-val">EMEA-HUB-01</div>
+    </div>
+  </div>
+
+  <!-- Overlay (idle / gameover / win) -->
+  <div id="overlay" onclick="event.stopPropagation()">
+
+    <!-- IDLE / START -->
+    <div id="panel-idle" class="panel show">
+      <div class="ov-eye" style="color:#ff0082">Mission Briefing</div>
+      <div class="ov-title" style="color:white">DEFEND YOUR<br><span style="color:#ff0082">WEEKEND</span></div>
+      <div class="ov-sub">
+        System threats are descending toward your weekend.<br>
+        <span style="color:#ff0082">Click to shoot</span> them before they cross the line.
+      </div>
+      <div class="info-row">
+        <div class="info-item"><span class="info-icon">♥</span><span class="info-lbl">3 Hearts</span></div>
+        <div class="info-item"><span class="info-icon">⏱</span><span class="info-lbl">60 Seconds</span></div>
+        <div class="info-item"><span class="info-icon">🎯</span><span class="info-lbl">Click to Shoot</span></div>
+      </div>
+      <div class="pts-row">
+        <span style="color:#ff0082">● Critical</span>&nbsp;= 200 pts &nbsp;|&nbsp;
+        <span>Security = 150 pts</span> &nbsp;|&nbsp;
+        <span>Others = 100 pts</span>
+      </div>
+      <button class="btn btn-pink" onclick="startGame()">Initialize Defense</button>
+    </div>
+
+    <!-- GAME OVER -->
+    <div id="panel-go" class="panel">
+      <div class="ov-eye" style="color:#ba1a1a">System Compromised</div>
+      <div class="ov-title" style="color:#ba1a1a">WEEKEND<br>DESTROYED</div>
+      <div style="font-size:12px;color:#e4e1e8;text-transform:uppercase;letter-spacing:1px">Threats overwhelmed the defense perimeter</div>
+      <div style="font-family:'Manrope',sans-serif;font-weight:800;font-size:36px;color:white;margin-top:8px">
+        <span style="color:#e4e1e8;font-size:14px;font-weight:400">FINAL SCORE &nbsp;</span><span id="go-score" style="color:#ff0082">00000</span>
+      </div>
+      <button class="btn btn-red" onclick="startGame()">Retry Defense</button>
+    </div>
+
+    <!-- WIN -->
+    <div id="panel-win" class="panel">
+      <div class="ov-eye" style="color:#ff0082">Mission Complete</div>
+      <div class="ov-title" style="color:white">WEEKEND<br><span style="color:#ff0082">SECURED</span></div>
+      <div style="font-size:12px;color:#e4e1e8;text-transform:uppercase;letter-spacing:1px">All threats neutralized · System integrity maintained</div>
+      <div class="result-row">
+        <div class="result-block">
+          <div class="score-big" id="win-score">00000</div>
+          <div class="score-lbl">Final Score</div>
+        </div>
+        <div class="result-div"></div>
+        <div class="result-block">
+          <div id="win-hearts" style="font-family:'Manrope',sans-serif;font-weight:800;font-size:36px"></div>
+          <div class="score-lbl">Hearts Left</div>
+        </div>
+      </div>
+      <button class="btn btn-pink" onclick="startGame()">Play Again</button>
+    </div>
+
+  </div>
+</div>
+
+<script>
+// ─── SVG icon paths (from original Figma export) ─────────────────────────────
+const SVG = {
+  'system-bug':
+    'M18 11.5C19.65 11.5 21.0625 12.0875 22.2375 13.2625C23.4125 14.4375 24 15.85 24 17.5V23.5C24 25.15 23.4125 26.5625 22.2375 27.7375C21.0625 28.9125 19.65 29.5 18 29.5C16.35 29.5 14.9375 28.9125 13.7625 27.7375C12.5875 26.5625 12 25.15 12 23.5V17.5C12 15.85 12.5875 14.4375 13.7625 13.2625C14.9375 12.0875 16.35 11.5 18 11.5ZM15 16H21V19H15V16ZM15 22H21V25H15V22ZM18 8.5C16.375 8.5 14.8687 8.9 13.4812 9.7C12.0937 10.5 11 11.6 10.2 13H6V16H9.15C9.075 16.5 9.03125 17 9.01875 17.5C9.00625 18 9 18.5 9 19H6V22H9C9 22.5 9.00625 23 9.01875 23.5C9.03125 24 9.075 24.5 9.15 25H6V28H10.2C10.55 28.575 10.9437 29.1125 11.3812 29.6125C11.8187 30.1125 12.325 30.55 12.9 30.925L10.5 33.4L12.6 35.5L15.825 32.275C16.525 32.5 17.2375 32.6125 17.9625 32.6125C18.6875 32.6125 19.4 32.5 20.1 32.275L23.4 35.5L25.5 33.4L23.025 30.925C23.6 30.55 24.1188 30.1187 24.5813 29.6312C25.0438 29.1437 25.45 28.6 25.8 28H30V25H26.85C26.925 24.5 26.9688 24 26.9813 23.5C26.9938 23 27 22.5 27 22H30V19H27C27 18.5 26.9938 18 26.9813 17.5C26.9688 17 26.925 16.5 26.85 16H30V13H25.8C25 11.6 23.9063 10.5 22.5188 9.7C21.1313 8.9 19.625 8.5 18 8.5Z',
+  'security-threat':
+    'M18 7C14.525 7.875 11.6562 9.86875 9.39375 12.9812C7.13125 16.0937 6 19.55 6 23.35V32.5L18 37L30 32.5V23.35C30 19.55 28.8688 16.0937 26.6063 12.9812C24.3438 9.86875 21.475 7.875 18 7ZM18 10.15C20.425 10.9 22.45 12.3812 24.075 14.5937C25.7 16.8062 26.65 19.275 26.925 22H18V33.8125L9 30.4375V23.35C9 23.075 9 22.85 9 22.675C9 22.5 9.025 22.275 9.075 22H18V10.15Z',
+  'legacy-code':
+    'M12 10C11.175 10 10.4687 10.2937 9.88125 10.8813C9.29375 11.4688 9 12.175 9 13V17.5H13.5V20.875C12.625 20.925 11.7937 21.1188 11.0062 21.4563C10.2187 21.7938 9.5 22.3 8.85 22.975V24.625H7.125L2.25 29.5C3.15 30.65 4.2625 31.4625 5.5875 31.9375C6.9125 32.4125 8.25 32.65 9.6 32.65C10.275 32.65 10.9312 32.6 11.5687 32.5C12.2062 32.4 12.85 32.2125 13.5 31.9375V34H31.5V14.5C31.5 13.25 31.0625 12.1875 30.1875 11.3125C29.3125 10.4375 28.25 10 27 10H12ZM16.5 17.5H25.5V14.5C25.5 14.075 25.6438 13.7188 25.9313 13.4313C26.2188 13.1438 26.575 13 27 13C27.425 13 27.7813 13.1438 28.0688 13.4313C28.3563 13.7188 28.5 14.075 28.5 14.5V31H16.5V30.1L25.5 21.1V19H23.4L19.125 23.275L18.825 22.975C18.475 22.625 18.1062 22.3125 17.7187 22.0375C17.3312 21.7625 16.925 21.55 16.5 21.4V17.5ZM8.4 27.625H11.85V24.4C12.15 24.2 12.4625 24.0625 12.7875 23.9875C13.1125 23.9125 13.45 23.875 13.8 23.875C14.375 23.875 14.8937 23.9625 15.3562 24.1375C15.8187 24.3125 16.275 24.625 16.725 25.075L17.025 25.375L14.925 27.475C14.2 28.2 13.3875 28.7438 12.4875 29.1063C11.5875 29.4688 10.625 29.65 9.6 29.65C9.1 29.65 8.625 29.6125 8.175 29.5375C7.725 29.4625 7.275 29.35 6.825 29.2L8.4 27.625Z',
+  'bottleneck':
+    'M12 10H24V14.5C24 16.15 23.4125 17.5625 22.2375 18.7375C21.0625 19.9125 19.65 20.5 18 20.5C16.35 20.5 14.9375 19.9125 13.7625 18.7375C12.5875 17.5625 12 16.15 12 14.5V10ZM18 23.5C18.4125 23.5 19.2375 23.5 19.2375 23.5C20.0625 23.5 21.0625 24.0875 22.2375 25.2625C23.4125 26.4375 24 27.85 24 29.5V34H12V29.5C12 27.85 12.5875 26.4375 13.7625 25.2625C14.9375 24.0875 16.35 23.5 18 23.5ZM6 7V10H9V14.5C9 16.025 9.35625 17.4562 10.0687 18.7937C10.7812 20.1313 11.775 21.2 13.05 22C11.775 22.8 10.7812 23.8688 10.0687 25.2063C9.35625 26.5438 9 27.975 9 29.5V34H6V37H30V34H27V29.5C27 27.975 26.6438 26.5438 25.9313 25.2063C25.2188 23.8688 24.225 22.8 22.95 22C24.225 21.2 25.2188 20.1313 25.9313 18.7937C26.6438 17.4562 27 16.025 27 14.5V10H30V7H6Z',
+};
+
+const TARGET_TYPES = ['system-bug', 'security-threat', 'legacy-code', 'bottleneck'];
+const TARGET_INFO = {
+  'system-bug':      { label: 'System Bug',      critical: true,  color: '#FF0082', pts: 200 },
+  'security-threat': { label: 'Security Threat', critical: false, color: '#FF0082', pts: 150 },
+  'legacy-code':     { label: 'Legacy Code',     critical: false, color: '#E4E1E8', pts: 100 },
+  'bottleneck':      { label: 'Bottleneck',      critical: false, color: '#FF0082', pts: 100 },
+};
+
+const BOTTOM_THRESHOLD = 82; // % from top
+
+// ─── Game state ───────────────────────────────────────────────────────────────
+let gs = {
+  phase: 'idle',
+  hearts: 3,
+  timeLeft: 60,
+  score: 0,
+  targets: [],
+  lastTime: null,
+  spawnTimer: 3.4,
+  nextId: 0,
+  rafId: null,
+};
+
+const domMap = new Map(); // targetId → DOM element
+
+// ─── DOM refs ─────────────────────────────────────────────────────────────────
+const gameEl     = document.getElementById('game');
+const scanlineEl = document.getElementById('scanline');
+const crosshairEl = document.getElementById('crosshair');
+const targetsEl  = document.getElementById('targets-layer');
+const fxEl       = document.getElementById('fx-layer');
+const flashEl    = document.getElementById('flash');
+const timerEl    = document.getElementById('timer-display');
+const timerStEl  = document.getElementById('timer-status');
+const scoreEl    = document.getElementById('score-display');
+const heartEls   = [document.getElementById('h0'), document.getElementById('h1'), document.getElementById('h2')];
+const heartStEl  = document.getElementById('heart-status');
+const overlayEl  = document.getElementById('overlay');
+const panelIdle  = document.getElementById('panel-idle');
+const panelGo    = document.getElementById('panel-go');
+const panelWin   = document.getElementById('panel-win');
+
+// ─── Mouse tracking ───────────────────────────────────────────────────────────
+gameEl.addEventListener('mousemove', e => {
+  if (gs.phase !== 'playing') return;
+  const r = gameEl.getBoundingClientRect();
+  crosshairEl.style.left = (e.clientX - r.left) + 'px';
+  crosshairEl.style.top  = (e.clientY - r.top)  + 'px';
+});
+
+gameEl.addEventListener('mouseleave', () => { crosshairEl.style.display = 'none'; });
+gameEl.addEventListener('mouseenter', () => { if (gs.phase === 'playing') crosshairEl.style.display = 'block'; });
+
+// Canvas click → shoot ring
+gameEl.addEventListener('click', e => {
+  if (gs.phase !== 'playing') return;
+  const r = gameEl.getBoundingClientRect();
+  addShootRing(e.clientX - r.left, e.clientY - r.top);
+});
+
+function addShootRing(x, y) {
+  const el = document.createElement('div');
+  el.className = 'shoot-ring';
+  el.style.left = x + 'px';
+  el.style.top  = y + 'px';
+  fxEl.appendChild(el);
+  setTimeout(() => el.remove(), 520);
+}
+
+// ─── HUD updates ──────────────────────────────────────────────────────────────
+function updateHearts() {
+  const h = gs.hearts;
+  heartEls.forEach((el, i) => { el.className = 'heart ' + (i < h ? 'on' : 'off'); });
+  const labels = ['Compromised', '⚠ Critical', 'Degraded', 'Full Integrity'];
+  heartStEl.textContent = labels[h] ?? 'Full Integrity';
+}
+
+function updateTimer() {
+  const t = gs.timeLeft;
+  const m = Math.floor(t / 60).toString().padStart(2, '0');
+  const s = Math.floor(t % 60).toString().padStart(2, '0');
+  timerEl.textContent = m + ':' + s;
+  const low = t <= 10;
+  timerEl.className     = low ? 'low' : '';
+  timerStEl.textContent = low ? '⚠ Threshold Imminent' : 'Defense Active';
+}
+
+function updateScore() {
+  scoreEl.textContent = gs.score.toString().padStart(5, '0');
+}
+
+function triggerFlash() {
+  flashEl.className = '';
+  void flashEl.offsetWidth; // force reflow to restart animation
+  flashEl.className = 'on';
+  setTimeout(() => { flashEl.className = ''; }, 620);
+}
+
+// ─── Overlay display ──────────────────────────────────────────────────────────
+function showOverlay(phase) {
+  overlayEl.style.display = 'flex';
+  overlayEl.className = phase === 'gameover' ? 'go' : '';
+  panelIdle.className = 'panel' + (phase === 'idle'     ? ' show' : '');
+  panelGo.className   = 'panel' + (phase === 'gameover' ? ' show' : '');
+  panelWin.className  = 'panel' + (phase === 'win'      ? ' show' : '');
+
+  if (phase === 'gameover') {
+    document.getElementById('go-score').textContent = gs.score.toString().padStart(5, '0');
+  }
+  if (phase === 'win') {
+    document.getElementById('win-score').textContent = gs.score.toString().padStart(5, '0');
+    let h = '';
+    for (let i = 0; i < gs.hearts; i++) h += '<span style="color:#ff0082;text-shadow:0 0 10px #ff0082">♥</span>';
+    for (let i = gs.hearts; i < 3;  i++) h += '<span style="color:rgba(255,0,130,0.2)">♥</span>';
+    document.getElementById('win-hearts').innerHTML = h;
+  }
+}
+
+function hideOverlay() {
+  overlayEl.style.display = 'none';
+}
+
+// ─── Target DOM management ────────────────────────────────────────────────────
+function createTargetEl(t) {
+  const info = TARGET_INFO[t.type];
+  const wrap = document.createElement('div');
+  wrap.className = 'target';
+  wrap.style.left = t.x + '%';
+  wrap.style.top  = t.y + '%';
+  wrap.innerHTML = `
+    <div class="target-inner">
+      <div class="target-icon">
+        <svg width="36" height="44" viewBox="0 0 36 44" fill="none">
+          <path d="${SVG[t.type]}" fill="${info.color}"/>
+        </svg>
+      </div>
+      <div class="target-name">${info.label}</div>
+      <div class="target-pts">+${info.pts} pts</div>
+      ${info.critical ? '<div class="target-crit">CRITICAL</div>' : ''}
+    </div>`;
+  wrap.addEventListener('click', e => {
+    e.stopPropagation();
+    shootTarget(t.id);
+  });
+  targetsEl.appendChild(wrap);
+  domMap.set(t.id, wrap);
+}
+
+function shootTarget(id) {
+  if (gs.phase !== 'playing') return;
+  const t = gs.targets.find(x => x.id === id);
+  if (!t || t.destroyed) return;
+  t.destroyed   = true;
+  t.destroyedAt = performance.now();
+  gs.score += TARGET_INFO[t.type].pts;
+  updateScore();
+  const el = domMap.get(id);
+  if (el) el.classList.add('burst');
+}
+
+function removeTargetEl(id) {
+  const el = domMap.get(id);
+  if (el) { el.remove(); domMap.delete(id); }
+}
+
+// ─── Game loop ────────────────────────────────────────────────────────────────
+function spawnTarget() {
+  const elapsed = 60 - gs.timeLeft;
+  const speed   = 10 + (elapsed / 60) * 15 + (Math.random() * 4 - 2);
+  const type    = TARGET_TYPES[Math.floor(Math.random() * TARGET_TYPES.length)];
+  const t = { id: gs.nextId++, type, x: 8 + Math.random() * 78, y: -18,
+              speed, destroyed: false, destroyedAt: null };
+  gs.targets.push(t);
+  createTargetEl(t);
+}
+
+function endGame(phase) {
+  gs.phase = phase;
+  scanlineEl.style.display = 'none';
+  crosshairEl.style.display = 'none';
+  gameEl.style.cursor = 'default';
+  showOverlay(phase);
+}
+
+function gameLoop(ts) {
+  if (gs.phase !== 'playing') return;
+
+  const delta = gs.lastTime !== null ? Math.min((ts - gs.lastTime) / 1000, 0.1) : 0;
+  gs.lastTime = ts;
+
+  // Countdown
+  gs.timeLeft = Math.max(0, gs.timeLeft - delta);
+  updateTimer();
+  if (gs.timeLeft <= 0) { endGame('win'); return; }
+
+  // Spawn
+  const interval = gs.timeLeft > 40 ? 3.5 : gs.timeLeft > 20 ? 2.5 : 1.8;
+  gs.spawnTimer += delta;
+  if (gs.spawnTimer >= interval) { gs.spawnTimer = 0; spawnTarget(); }
+
+  // Move targets
+  let lostHeart = false;
+  const now = performance.now();
+  gs.targets = gs.targets.filter(t => {
+    if (t.destroyed) {
+      if (now - t.destroyedAt >= 450) { removeTargetEl(t.id); return false; }
+      return true;
+    }
+    t.y += t.speed * delta;
+    if (t.y >= BOTTOM_THRESHOLD) { removeTargetEl(t.id); lostHeart = true; return false; }
+    const el = domMap.get(t.id);
+    if (el) el.style.top = t.y + '%';
+    return true;
+  });
+
+  if (lostHeart) {
+    gs.hearts = Math.max(0, gs.hearts - 1);
+    triggerFlash();
+    updateHearts();
+    if (gs.hearts <= 0) { endGame('gameover'); return; }
+  }
+
+  gs.rafId = requestAnimationFrame(gameLoop);
+}
+
+// ─── Start / restart ──────────────────────────────────────────────────────────
+function startGame() {
+  if (gs.rafId) cancelAnimationFrame(gs.rafId);
+  domMap.forEach(el => el.remove());
+  domMap.clear();
+
+  gs = { phase: 'playing', hearts: 3, timeLeft: 60, score: 0,
+         targets: [], lastTime: null, spawnTimer: 3.4, nextId: 0, rafId: null };
+
+  updateHearts();
+  updateTimer();
+  updateScore();
+  hideOverlay();
+
+  scanlineEl.style.display  = 'block';
+  crosshairEl.style.display = 'block';
+  gameEl.style.cursor = 'none';
+
+  gs.rafId = requestAnimationFrame(gameLoop);
+}
+
+// ─── Init ─────────────────────────────────────────────────────────────────────
+showOverlay('idle');
+</script>
+</body>
+</html>
